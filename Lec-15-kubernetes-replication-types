@@ -1,0 +1,242 @@
+https://www.mirantis.com/blog/kubernetes-replication-controller-replica-set-and-deployments-understanding-replication-options/
+
+######Kubernetes replication types / Kubernetes pod controller
+####There are 3 types of replication controller #############
+
+# 1) replicaiton controller
+# 2) replica set
+# 3) deployment 
+
+
+
+***********Kubernetes Replication Controller, Replica Set and Deployments************
+
+As a container management tool, Kubernetes was designed to orchestrate multiple containers and replication, and in fact there are currently several ways to do it. In this article, we'll look at three options: Replication Controllers, Replica Sets, and Deployments.
+Table of Contents
+What is Kubernetes replication for?
+Kubernetes Replication Controller vs Replica Set
+Kubernetes Replication Controller vs Deployment
+Recovering from Crashes: Creating a specified number of replicas
+Scaling up or down: Manually changing the number of replicas
+Deploying a new version: Replacing replicas by changing their labels
+
+
+Table of Contents
+What is Kubernetes replication for?
+Kubernetes Replication Controller vs Replica Set
+Kubernetes Replication Controller vs Deployment
+Recovering from Crashes: Creating a specified number of replicas
+Scaling up or down: Manually changing the number of replicas
+Deploying a new version: Replacing replicas by changing their labels
+
+
+
+What is Kubernetes replication for?
+Before we go into the details on how you would do replication, let's talk about why.  Typically you would want to replicate your containers (and thereby your applications) for several reasons, including:
+Reliability: By having multiple versions of an application, you prevent problems if one or more fails.  This is particularly true if the system replaces any containers that fail.
+Load balancing: Having multiple versions of a container enables you to easily send traffic to different instances to prevent overloading of a single instance or node. This is something that Kubernetes does out of the box, making it extremely convenient.
+Scaling: When load does become too much for the number of existing instances, Kubernetes enables you to easily scale up your application, adding additional instances as needed.
+Replication is appropriate for numerous use cases, including:
+Microservices-based applications: In these cases, multiple small applications provide very specific functionality.
+Cloud native applications: Because cloud-native applications are based on the theory that any component can fail at any time, replication is a perfect environment for implementing them, as multiple instances are baked into the architecture.
+
+Mobile applications: Mobile applications can often be architected so that the mobile client interacts with an isolated version of the server application.
+Kubernetes has multiple ways in which you can implement replication.
+Kubernetes Replication Controller vs Replica Set
+The Replication Controller is the original form of replication in Kubernetes.  It's being replaced by Replica Sets, but it's still in wide use, so it's worth understanding what it is and how it works.
+
+A Replication Controller is a structure that enables you to easily create multiple pods, then make sure that that number of pods always exists. If a pod does crash, the Replication Controller replaces it.
+
+ A Kubernetes controller such as the Replication Controller also provides other benefits, such as the ability to scale the number of pods, and to update or delete multiple pods with a single command.
+
+You can create a Replication Controller with an imperative command, or declaratively, from a file.  For example, create a new file called rc.yaml and add the following text:
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: soaktestrc
+spec:
+  replicas: 3
+  selector:
+    app: soaktestrc
+  template:
+    metadata:
+      name: soaktestrc
+      labels:
+        app: soaktestrc
+    spec:
+      containers:
+      - name: soaktestrc
+        image: nickchase/soaktest
+        ports:
+        - containerPort: 80
+Most of this structure should look familiar from our discussion of how to create a Kubernetes Deployment; we've got the name of the actual Kubernetes Replication Controller (soaktestrc) and we're designating that we should have 3 replicas, each of which are defined by the template.  The selector defines how we know which pods belong to this Replication Controller.
+
+Now tell Kubernetes to create the Replication Controller based on that YAML file:
+# kubectl create -f rc.yaml
+replicationcontroller "soaktestrc" created
+Let's take a look at what we have using the describe command:
+# kubectl describe rc soaktestrc
+Name:           soaktestrc
+Namespace:      default
+Image(s):       nickchase/soaktest
+Selector:       app=soaktestrc
+Labels:         app=soaktestrc
+Replicas:       3 current / 3 desired
+Pods Status:    3 Running / 0 Waiting / 0 Succeeded / 0 Failed
+No volumes.
+Events:
+  FirstSeen     LastSeen        Count   From                            SubobjectPath   Type   Reason                   Message
+  ---------     --------        -----   ----                            -------------   --------------                  -------
+  1m            1m              1       {replication-controller }                       Normal SuccessfulCreate Created pod: soaktestrc-g5snq
+  1m            1m              1       {replication-controller }                       Normal SuccessfulCreate Created pod: soaktestrc-cws05
+  1m            1m              1       {replication-controller }                       Normal SuccessfulCreate Created pod: soaktestrc-ro2bl
+As you can see, we've got the Replication Controller, and there are 3 replicas, of the 3 that we wanted.  All 3 of them are currently running.  You can also see the individual pods listed underneath, along with their names and other relevant fields.  If you ask Kubernetes to show you the pods, you can see those same names show up:
+# kubectl get pods
+NAME               READY     STATUS    RESTARTS   AGE
+soaktestrc-cws05   1/1       Running   0          3m
+soaktestrc-g5snq   1/1       Running   0          3m
+soaktestrc-ro2bl   1/1       Running   0          3m
+Next we'll look at Replica Sets, but first let's clean up:
+# kubectl delete rc soaktestrc
+replicationcontroller "soaktestrc" deleted
+
+# kubectl get pods
+As you can see, when you delete the Replication Controller, you also delete all of the pods that it created.
+Kubernetes Replica Sets
+It can be tricky to compare a replica controller vs replica set (ReplicaSet), because the latter is a sort of a hybrid. They are in some ways more powerful than ReplicationControllers, and in others they are less powerful.
+
+ReplicaSets are declared in essentially the same way as ReplicationControllers, except that they have more options for the selector.
+Configuring the YAML for a ReplicaSet
+For example, we could create a ReplicaSet like this:
+ apiVersion: apps/v1
+ kind: ReplicaSet
+ metadata:
+   name: soaktestrs
+ spec:
+   replicas: 3
+   selector:
+     matchLabels:
+       app: soaktestrs
+   template:
+     metadata:
+       labels:
+         app: soaktestrs
+         environment: dev
+     spec:
+       containers:
+       - name: soaktestrs
+         image: nickchase/soaktest
+         ports:
+         - containerPort: 80
+In this case, it's more or less the same as when we were creating the Replication Controller, except we're using matchLabels instead of label.  But we could just as easily have said:
+...
+spec:
+   replicas: 3
+   selector:
+     matchExpressions:
+      - {key: app, operator: In, values: [soaktestrs, soaktestrs, soaktest]}
+      - {key: teir, operator: NotIn, values: [production]}
+  template:
+     metadata:
+...
+In this case, we're looking at two different conditions:
+The app label must be soaktestrc, soaktestrs, or soaktest
+The tier label (if it exists) must not be production
+Create the Replica Set
+Let's go ahead and create the ReplicaSet:
+# kubectl create -f replicaset.yaml
+replicaset "soaktestrs" created
+Check the Status of a ReplicaSet
+Once the ReplicaSet is created, we can use the describe command to check the status of the pods and get more detail.
+# kubectl describe rs soaktestrs
+Name:           soaktestrs
+Namespace:      default
+Image(s):       nickchase/soaktest
+Selector:       app in (soaktest,soaktestrs),teir notin (production)
+Labels:         app=soaktestrs
+Replicas:       3 current / 3 desired
+Pods Status:    3 Running / 0 Waiting / 0 Succeeded / 0 Failed
+No volumes.
+Events:
+  FirstSeen     LastSeen        Count   From                            SubobjectPath   Type    Reason                   Message
+  ---------     --------        -----   ----                            -------------   --------------                   -------
+  1m            1m              1       {replicaset-controller }                        Normal  SuccessfulCreate Created pod: soaktestrs-it2hf
+  1m            1m              1       {replicaset-controller }                       Normal  SuccessfulCreate Created pod: soaktestrs-kimmm
+  1m            1m              1       {replicaset-controller }                        Normal  SuccessfulCreate Created pod: soaktestrs-8i4ra
+
+# kubectl get pods
+NAME               READY     STATUS    RESTARTS   AGE
+soaktestrs-8i4ra   1/1       Running   0          1m
+soaktestrs-it2hf   1/1       Running   0          1m
+soaktestrs-kimmm   1/1       Running   0          1m
+As you can see, the output is pretty much the same as for a Replication Controller (except for the selector), and for most intents and purposes, they are similar.  The major difference between a replication controller and replica set is that the rolling-update command works with Replication Controllers, but won't work with a Replica Set.  This is because Replica Sets are meant to be used as the backend for Deployments.
+Delete the ReplicaSet
+Let's clean up before we move on.
+# kubectl delete rs soaktestrs
+replicaset "soaktestrs" deleted
+
+# kubectl get pods
+Again, the pods that were created are deleted when we delete the Replica Set.
+Kubernetes Replication Controller vs Deployment
+Deployments are intended to replace Replication Controllers. When comparing a Deployment vs Replica Set, the former provides  the same replication functions (through Replica Sets) and also the ability to rollout changes and roll them back if necessary.
+Configuring the YAML for a Deployment
+Let's create a simple Deployment using the same image we've been using.  First create a new configuration file, deployment.yaml, and add the following:
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: soaktest
+spec:
+  replicas: 5
+  template:
+    metadata:
+      labels:
+        app: soaktest
+    spec:
+      containers:
+      - name: soaktest
+        image: nickchase/soaktest
+        ports:
+        - containerPort: 80
+Now go ahead and create the Deployment:
+# kubectl create -f deployment.yaml
+deployment "soaktest" created
+Now let's go ahead and describe the Deployment:
+# kubectl describe deployment soaktest
+Name:                   soaktest
+Namespace:              default
+CreationTimestamp:      Sun, 05 Mar 2017 16:21:19 +0000
+Labels:                 app=soaktest
+Selector:               app=soaktest
+Replicas:               5 updated | 5 total | 5 available | 0 unavailable
+StrategyType:           RollingUpdate
+MinReadySeconds:        0
+RollingUpdateStrategy:  1 max unavailable, 1 max surge
+OldReplicaSets:         
+NewReplicaSet:          soaktest-3914185155 (5/5 replicas created)
+Events:
+  FirstSeen     LastSeen        Count   From                            SubobjectPath   Type    Reason                   Message
+  ---------     --------        -----   ----                            -------------   --------------                   -------
+  38s           38s             1       {deployment-controller }                        Normal  ScalingReplicaSet        Scaled up replica set soaktest-3914185155 to 3
+  36s           36s             1       {deployment-controller }                        Normal  ScalingReplicaSet        Scaled up replica set soaktest-3914185155 to 5
+As you can see, rather than listing the individual pods, Kubernetes shows us the Replica Set.  Notice that the name of the Replica Set is the Deployment name and a hash value.
+
+A complete discussion of updates is out of scope for this article -- we'll cover it in the future -- but couple of interesting things here:
+The StrategyType is RollingUpdate. This value can also be set to Recreate.
+By default we have a minReadySeconds value of 0; we can change that value if we want pods to be up and running for a certain amount of time -- say, to load resources -- before they're truly considered "ready".
+The RollingUpdateStrategy shows that we have a limit of 1 maxUnavailable -- meaning that when we're updating the Deployment, we can have up to 1 missing pod before it's replaced, and 1 maxSurge, meaning we can have one extra pod as we scale the new pods back up.
+As you can see, the Deployment is backed, in this case, by Replica Set soaktest-3914185155. If we go ahead and look at the list of actual pods...
+# kubectl get pods
+NAME                        READY     STATUS    RESTARTS   AGE
+soaktest-3914185155-7gyja   1/1       Running   0          2m
+soaktest-3914185155-lrm20   1/1       Running   0          2m
+soaktest-3914185155-o28px   1/1       Running   0          2m
+soaktest-3914185155-ojzn8   1/1       Running   0          2m
+soaktest-3914185155-r2pt7   1/1       Running   0          2m
+... you can see that their names consist of the Replica Set name and an additional identifier.
+
+Mirantis simplifies Kubernetes.
+From the world’s most popular Kubernetes IDE to fully managed services and training, we can help you at every step of your K8s journey.
+
+Connect with a Mirantis expert to learn how we can help you.
+
+
