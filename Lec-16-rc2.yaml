@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: cloudknowledge-rc
+spec:
+  replicas: 10
+  selector:
+    app: cloudknowledge-rc
+  template:
+    metadata:
+      name: cloudknowledge-rc
+      labels:
+        app: cloudknowledge-rc
+    spec:
+      containers:
+      - name: cloudknowledge-rc
+        image: nginx
+        ports:
+        - containerPort: 80
+        
+        
+        
