@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  labels:
+    app: nginx
+spec:
+  replicas: 10
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.12.2
+        ports:
+        - containerPort: 80
+
+
+
+#### https://kubernetes.io/docs/concepts/workloads/controllers/deployment/ ######
+#kubectl apply -f Lec-19-Deployment.yaml --record=true
+#kubectl get deployment,rs,pod
+#kubect describe deployment nginx-deployment  
+#kubectl edit deployment nginx-deployment
+#kubectl rollout history deployment  nginx-deployment
+#kubectl delete deployment nginx-deployment
